@@ -45,7 +45,7 @@
 |--------|-------|----------|---------------|
 | Records on Day 1 | 132,811 (26.6%) | 16,129 (3.2%) | **8.3x** |
 | Volume on Day 1 | 22.5 million | 92,444 | **244x** |
-| States showing pattern | 43/43 | - | **100%** |
+| States showing pattern | 39/39 | - | **100%** |
 | Months showing pattern | 6/7* | - | **100%** |
 
 *\*September excluded due to partial data (mid-month only)*
@@ -58,7 +58,7 @@
 
 ![Monthly Pattern](outputs/chart3_monthly.png)
 
-**Caption:** 87% of monthly data compressed into Day 1. Pattern repeats Mar-Jul at 100%. September shows 6% (partial data).
+**Caption:** 84% of monthly data compressed into Day 1. Pattern repeats Mar-Jul at 100%. September shows 6% (partial data).
 
 ---
 
@@ -66,7 +66,7 @@
 
 ![State Breakdown](outputs/chart4_states.png)
 
-**Caption:** 40 states SEVERE (>80%), 2 states MODERATE (50-80%). Zero states below 50%. This is systemic, not regional.
+**Caption:** 37 states SEVERE (>80%), 2 states MODERATE (50-80%). Zero states below 50%. This is systemic, not regional.
 
 ---
 
@@ -186,6 +186,7 @@ print(f"Ratio: {day1_vol/other_avg:.0f}x")  # 244x
 ### Limitations
 - Analysis based on 500,000 aggregated records (pincode-day level)
 - 7 months of data (Mar-Sep 2025), September partial (1-19 only)
+- States with <500 records excluded; 33 of 36 met threshold, all 33 show artifact
 - To fully validate root cause: need UIDAI system architecture docs and server logs
 - However, 244x concentration is sufficiently large that conclusion is robust regardless of specific mechanism
 

@@ -1,214 +1,225 @@
 """
 Aadhaar Day-1 Artifact Analysis
 -------------------------------
-Digging into why so much data lands on the 1st of every month.
-Spoiler: it's not because everyone loves updating on day 1.
+Generates the polished charts for UIDAI Hackathon submission.
 
-Author: [Your Name]
+Author: Dhananjay
 Date: Jan 2025
 """
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 
-# gonna need somewhere to dump the charts
+# Create outputs folder
 if not os.path.exists('outputs'):
     os.makedirs('outputs')
 
 print("=" * 60)
-print("Let's figure out what's going on with Day 1...")
+print("UIDAI Day 1 Artifact Analysis")
 print("=" * 60)
 
-# --- STEP 1: Load the data ---
-# using the biometric updates file, it's the biggest one
+# --- Load Data ---
 print("\nLoading biometric data...")
-
 data_path = 'data/biometric/api_data_aadhar_biometric/api_data_aadhar_biometric_0_500000.csv'
 df = pd.read_csv(data_path)
-
-# clean up column names, sometimes there's whitespace
 df.columns = df.columns.str.strip()
 
-# parse the dates - they're in DD-MM-YYYY format (Indian style)
+# Parse dates
 df['date'] = pd.to_datetime(df['date'], format='%d-%m-%Y', errors='coerce')
-
-# drop any rows where date parsing failed
-before = len(df)
 df = df.dropna(subset=['date'])
-after = len(df)
-if before != after:
-    print(f"Dropped {before - after} rows with bad dates")
-
-print(f"Got {len(df):,} records")
-print(f"From {df['date'].min().date()} to {df['date'].max().date()}")
-
-# --- STEP 2: Extract day of month ---
 df['day'] = df['date'].dt.day
 df['month'] = df['date'].dt.month
+df['year_month'] = df['date'].dt.to_period('M')
 
-# --- STEP 3: The big question - how many records on each day? ---
-print("\n--- Checking record distribution by day ---")
+print(f"Loaded {len(df):,} records")
+print(f"Date range: {df['date'].min().date()} to {df['date'].max().date()}")
 
-records_per_day = df.groupby('day').size()
-day1_count = records_per_day.get(1, 0)
-total = len(df)
+# --- Calculate Key Metrics ---
+day1_records = len(df[df['day'] == 1])
+total_records = len(df)
+day1_pct = day1_records / total_records * 100
 
-# what would we expect if it was evenly distributed?
-expected_per_day = total / 31
+day1_volume = df[df['day'] == 1]['bio_age_17_'].sum()
+other_avg = df[df['day'] != 1].groupby('day')['bio_age_17_'].sum().mean()
+volume_ratio = day1_volume / other_avg
 
-pct_on_day1 = (day1_count / total) * 100
-concentration = day1_count / expected_per_day
+print(f"\nKey Finding: {day1_pct:.1f}% of records on Day 1")
+print(f"Volume concentration: {volume_ratio:.0f}x")
 
-print(f"Records on Day 1: {day1_count:,} ({pct_on_day1:.1f}%)")
-print(f"Expected if uniform: {expected_per_day:,.0f} (3.2%)")
-print(f"That's {concentration:.1f}x more than expected!")
+# ============================================================
+# CHART 1: Administrative Heartbeat (Time Series)
+# ============================================================
+print("\n--- Generating Chart 1: Administrative Heartbeat ---")
 
-# --- STEP 4: What about volume (actual updates, not just rows)? ---
-print("\n--- Now checking actual update volume ---")
+monthly_day1 = df[df['day'] == 1].groupby('year_month')['bio_age_17_'].sum() / 1e6
+months = [str(m) for m in monthly_day1.index]
 
-volume_per_day = df.groupby('day')['bio_age_17_'].sum()
-day1_volume = volume_per_day.get(1, 0)
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(months, monthly_day1.values, 'k-', linewidth=2, label='Daily Volume')
+ax.scatter(months, monthly_day1.values, c='red', s=100, zorder=5, label='1st of Month (Batch Upload)')
 
-# average for other days
-other_days = volume_per_day[volume_per_day.index != 1]
-avg_other = other_days.mean()
+for i, (m, v) in enumerate(zip(months, monthly_day1.values)):
+    ax.annotate(f'{v:.1f}M', (i, v), textcoords="offset points", 
+                xytext=(0,10), ha='center', fontsize=10, color='red', fontweight='bold')
 
-volume_ratio = day1_volume / avg_other
-
-print(f"Volume on Day 1: {day1_volume:,}")
-print(f"Avg other days: {avg_other:,.0f}")
-print(f"Volume concentration: {volume_ratio:.0f}x - holy shit")
-
-# --- STEP 5: Is this consistent across months? ---
-print("\n--- Checking if pattern holds every month ---")
-
-for month in sorted(df['month'].unique()):
-    month_data = df[df['month'] == month]
-    day1_in_month = len(month_data[month_data['day'] == 1])
-    pct = (day1_in_month / len(month_data)) * 100
-    print(f"  Month {month}: {pct:.0f}% on Day 1")
-
-# --- STEP 6: Same for all states? ---
-print("\n--- Checking across states ---")
-
-states_checked = 0
-states_with_spike = 0
-
-for state in df['state'].unique():
-    state_data = df[df['state'] == state]
-    
-    # skip if too few records
-    if len(state_data) < 100:
-        continue
-    
-    states_checked += 1
-    day1_pct = len(state_data[state_data['day'] == 1]) / len(state_data) * 100
-    
-    if day1_pct > 50:
-        states_with_spike += 1
-
-print(f"Checked {states_checked} states with significant data")
-print(f"{states_with_spike} have >50% on Day 1")
-print(f"That's {states_with_spike/states_checked*100:.0f}% of states - it's everywhere")
-
-# --- CHARTS TIME ---
-print("\n--- Making some charts ---")
-
-# Chart 1: Bar chart of records by day
-fig, ax = plt.subplots(figsize=(12, 5))
-
-colors = ['#d32f2f' if d == 1 else '#1976d2' for d in records_per_day.index]
-ax.bar(records_per_day.index, records_per_day.values, color=colors)
-ax.axhline(expected_per_day, color='orange', linestyle='--', linewidth=2, 
-           label=f'Expected ({expected_per_day:,.0f})')
-ax.set_xlabel('Day of Month')
-ax.set_ylabel('Number of Records')
-ax.set_title('Day 1 Concentration: 26.6% of Records on Single Day', fontweight='bold')
-ax.legend()
-ax.set_xticks(range(1, 32))
+ax.set_xlabel('Date (2025)', fontsize=12)
+ax.set_ylabel('Biometric Updates (Millions)', fontsize=12)
+ax.set_title('The Administrative Heartbeat: Why Real-Time Analysis Fails', fontsize=14, fontweight='bold')
+ax.legend(loc='upper right')
+ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('outputs/chart1_day_distribution.png', dpi=200)
-print("  Saved chart1_day_distribution.png")
+plt.savefig('outputs/chart1_heartbeat.png', dpi=200, bbox_inches='tight')
+print("  Saved: outputs/chart1_heartbeat.png")
 
-# Chart 2: Volume by day
-fig, ax = plt.subplots(figsize=(12, 5))
+# ============================================================
+# CHART 2: State Artifact Index (Batch Processing Intensity)
+# ============================================================
+print("\n--- Generating Chart 2: State Artifact Index ---")
 
-colors = ['#d32f2f' if d == 1 else '#4caf50' for d in volume_per_day.index]
-ax.bar(volume_per_day.index, volume_per_day.values / 1e6, color=colors)
-ax.axhline(volume_per_day.mean() / 1e6, color='orange', linestyle='--', 
-           linewidth=2, label='Average')
-ax.set_xlabel('Day of Month')
-ax.set_ylabel('Updates (Millions)')
-ax.set_title(f'Volume Concentration: {day1_volume/1e6:.1f}M on Day 1 ({volume_ratio:.0f}x Average)', 
-             fontweight='bold')
-ax.legend()
-ax.set_xticks(range(1, 32))
-plt.tight_layout()
-plt.savefig('outputs/chart2_volume_by_day.png', dpi=200)
-print("  Saved chart2_volume_by_day.png")
+state_day1 = df[df['day'] == 1].groupby('state')['bio_age_17_'].sum()
+state_other = df[df['day'] != 1].groupby('state')['bio_age_17_'].sum() / 30
+state_ratio = (state_day1 / state_other).dropna().sort_values(ascending=True)
 
-# Chart 3: Monthly consistency
-monthly_pcts = []
-for m in sorted(df['month'].unique()):
-    mdata = df[df['month'] == m]
-    pct = len(mdata[mdata['day'] == 1]) / len(mdata) * 100
-    monthly_pcts.append({'month': m, 'pct': pct})
-
-monthly_df = pd.DataFrame(monthly_pcts)
-
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.bar(range(len(monthly_df)), monthly_df['pct'], color='#d32f2f')
-ax.set_xticks(range(len(monthly_df)))
-ax.set_xticklabels([f"Month {m}" for m in monthly_df['month']])
-ax.axhline(3.2, color='green', linestyle='--', linewidth=2, label='Expected 3.2%')
-ax.set_ylabel('% of Records on Day 1')
-ax.set_title('Pattern Repeats Every Month', fontweight='bold')
-
-# add labels on bars
-for i, pct in enumerate(monthly_df['pct']):
-    ax.text(i, pct + 2, f'{pct:.0f}%', ha='center', fontweight='bold')
-
-ax.legend()
-ax.set_ylim(0, 110)
-plt.tight_layout()
-plt.savefig('outputs/chart3_monthly_pattern.png', dpi=200)
-print("  Saved chart3_monthly_pattern.png")
-
-# Chart 4: State breakdown
-state_day1 = df[df['day'] == 1].groupby('state').size()
-state_total = df.groupby('state').size()
-state_pct = (state_day1 / state_total * 100).dropna()
-
-# only keep states with decent sample size
-state_pct = state_pct[state_total > 500].sort_values()
+# Filter significant states and top 15
+state_counts = df.groupby('state').size()
+state_ratio = state_ratio[state_ratio.index.isin(state_counts[state_counts > 1000].index)]
+state_ratio = state_ratio.tail(15)
 
 fig, ax = plt.subplots(figsize=(10, 8))
+bars = ax.barh(range(len(state_ratio)), state_ratio.values, color='steelblue')
+ax.set_yticks(range(len(state_ratio)))
+ax.set_yticklabels(state_ratio.index, fontsize=10)
+ax.axvline(1.0, color='red', linestyle='--', linewidth=2, label='1.0 (Day 1 > Total of Rest!)')
+ax.set_xlabel('Batch Processing Intensity (Ratio of Day 1 vs All Other Days)', fontsize=11)
+ax.set_title('The "Artificial" States: Where Data is Batched, Not Streamed', 
+             fontsize=14, fontweight='bold', color='darkred')
 
-colors = ['#d32f2f' if p > 80 else '#ff9800' if p > 50 else '#4caf50' 
-          for p in state_pct.values]
-ax.barh(range(len(state_pct)), state_pct.values, color=colors)
-ax.set_yticks(range(len(state_pct)))
-ax.set_yticklabels(state_pct.index, fontsize=8)
-ax.axvline(3.2, color='green', linestyle='--', linewidth=2, label='Expected 3.2%')
-ax.set_xlabel('% of Records on Day 1')
-ax.set_title('All States Show Day 1 Concentration', fontweight='bold')
-ax.legend()
-ax.set_xlim(0, 100)
+# Add value labels
+for i, v in enumerate(state_ratio.values):
+    ax.text(v + 0.2, i, f'{v:.1f}x', va='center', fontweight='bold')
+
+ax.legend(loc='lower right')
 plt.tight_layout()
-plt.savefig('outputs/chart4_state_breakdown.png', dpi=200)
-print("  Saved chart4_state_breakdown.png")
+plt.savefig('outputs/chart2_artifact_index.png', dpi=200, bbox_inches='tight')
+print("  Saved: outputs/chart2_artifact_index.png")
 
-# --- WRAP UP ---
+# ============================================================
+# CHART 3: Monthly Consistency (100% bars)
+# ============================================================
+print("\n--- Generating Chart 3: Monthly Consistency ---")
+
+monthly_pct = []
+for m in sorted(df['year_month'].unique()):
+    mdata = df[df['year_month'] == m]
+    day1_vol = mdata[mdata['day'] == 1]['bio_age_17_'].sum()
+    total_vol = mdata['bio_age_17_'].sum()
+    pct = (day1_vol / total_vol * 100) if total_vol > 0 else 0
+    monthly_pct.append({'month': str(m), 'pct': pct})
+
+monthly_df = pd.DataFrame(monthly_pct)
+avg_pct = monthly_df['pct'].mean()
+
+fig, ax = plt.subplots(figsize=(12, 6))
+bars = ax.bar(range(len(monthly_df)), monthly_df['pct'], color='darkred', edgecolor='black')
+ax.axhline(50, color='orange', linestyle='--', linewidth=2, label='50% threshold (already problematic)')
+ax.axhline(avg_pct, color='blue', linestyle='--', linewidth=2, label=f'Average = {avg_pct:.1f}%')
+
+# Add percentage labels
+for i, pct in enumerate(monthly_df['pct']):
+    ax.text(i, pct + 2, f'{pct:.0f}%', ha='center', fontweight='bold', fontsize=11)
+
+ax.set_xticks(range(len(monthly_df)))
+ax.set_xticklabels(monthly_df['month'], fontsize=10)
+ax.set_ylabel('% of Monthly Data on Day 1', fontsize=12)
+ax.set_ylim(0, 110)
+ax.legend(loc='upper right')
+
+# Title with key message
+ax.set_title(f'AADHAAR TEMPORAL CORRUPTION: {avg_pct:.0f}% of Monthly Data Compressed Into Day 1\n'
+             'This is NOT citizen behavior - this is upload artifact', 
+             fontsize=13, fontweight='bold', color='darkred')
+
+plt.tight_layout()
+plt.savefig('outputs/chart3_monthly.png', dpi=200, bbox_inches='tight')
+print("  Saved: outputs/chart3_monthly.png")
+
+# ============================================================
+# CHART 4: State-by-State Analysis (Color-coded)
+# ============================================================
+print("\n--- Generating Chart 4: Universal System Failure ---")
+
+state_day1_pct = []
+for state in df['state'].unique():
+    sdata = df[df['state'] == state]
+    if len(sdata) < 100:  # Lower threshold to include more states
+        continue
+    day1_vol = sdata[sdata['day'] == 1]['bio_age_17_'].sum()
+    total_vol = sdata['bio_age_17_'].sum()
+    pct = (day1_vol / total_vol * 100) if total_vol > 0 else 0
+    state_day1_pct.append({'state': state, 'pct': pct})
+
+state_df = pd.DataFrame(state_day1_pct).sort_values('pct', ascending=True)
+
+# Color coding
+colors = []
+for pct in state_df['pct']:
+    if pct > 80:
+        colors.append('darkred')
+    elif pct > 50:
+        colors.append('orange')
+    else:
+        colors.append('gold')
+
+severe = len(state_df[state_df['pct'] > 80])
+moderate = len(state_df[(state_df['pct'] > 50) & (state_df['pct'] <= 80)])
+mild = len(state_df[state_df['pct'] <= 50])
+
+fig, ax = plt.subplots(figsize=(12, 10))
+bars = ax.barh(range(len(state_df)), state_df['pct'].values, color=colors)
+ax.set_yticks(range(len(state_df)))
+ax.set_yticklabels(state_df['state'].values, fontsize=8)
+ax.axvline(50, color='gray', linestyle='--', linewidth=1.5)
+ax.axvline(80, color='gray', linestyle='--', linewidth=1.5)
+ax.set_xlabel('% of Monthly Data on Day 1', fontsize=12)
+ax.set_xlim(0, 100)
+
+# Legend
+from matplotlib.patches import Patch
+legend_elements = [
+    Patch(facecolor='darkred', label=f'SEVERE (>80%): {severe} states'),
+    Patch(facecolor='orange', label=f'MODERATE (50-80%): {moderate} states'),
+    Patch(facecolor='gold', label=f'MILD (<50%): {mild} states')
+]
+ax.legend(handles=legend_elements, loc='lower right', fontsize=10)
+
+ax.set_title(f'State-by-State Analysis: UNIVERSAL System Failure\n'
+             f'(Red = >80% on day 1 | Orange = 50-80% | Yellow = <50%)', 
+             fontsize=13, fontweight='bold')
+
+plt.tight_layout()
+plt.savefig('outputs/chart4_states.png', dpi=200, bbox_inches='tight')
+print("  Saved: outputs/chart4_states.png")
+
+# ============================================================
+# SUMMARY
+# ============================================================
 print("\n" + "=" * 60)
-print("DONE")
+print("ANALYSIS COMPLETE")
 print("=" * 60)
 print(f"""
 Summary:
-  - {pct_on_day1:.1f}% of records fall on Day 1 (expected: 3.2%)
-  - Volume concentration: {volume_ratio:.0f}x higher than other days
-  - Pattern holds in {states_with_spike}/{states_checked} states
+  - {day1_pct:.1f}% of records on Day 1 (expected: 3.2%)
+  - Volume concentration: {volume_ratio:.0f}x
+  - Monthly average: {avg_pct:.0f}% on Day 1
+  - {severe} states SEVERE, {moderate} states MODERATE
   
-Conclusion: This ain't citizen behavior. It's batch processing.
-The 'date' field is upload time, not transaction time.
+Charts saved to outputs/ folder:
+  - chart1_heartbeat.png
+  - chart2_artifact_index.png
+  - chart3_monthly.png
+  - chart4_states.png
+  
+Conclusion: This is batch processing, not citizen behavior.
 """)
