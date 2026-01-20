@@ -23,19 +23,19 @@
 
 ## 1. The Evidence
 
-### Chart 1: Day-of-Month Record Distribution
+### Chart 1: The Administrative Heartbeat
 
-![Day Distribution](outputs/chart1_day_distribution.png)
+![Administrative Heartbeat](outputs/chart1_heartbeat.png)
 
-**Caption:** 26.6% of all records fall on Day 1. Expected: 3.2%. Concentration: 8.3x
+**Caption:** Monthly Day 1 spikes (4.0M-5.3M) reveal batch upload pattern. Daily volume drops to near-zero on other days.
 
 ---
 
-### Chart 2: Volume Concentration
+### Chart 2: State Artifact Index
 
-![Volume by Day](outputs/chart2_volume_by_day.png)
+![State Artifact Index](outputs/chart2_artifact_index.png)
 
-**Caption:** 22.5 million updates on Day 1 vs ~92K average. Concentration: 244x
+**Caption:** Batch processing intensity by state. Dadra (17.9x), Ladakh (17.4x), Mizoram (14.2x). All states show Day 1 > rest of month.
 
 ---
 
@@ -56,17 +56,17 @@
 
 ### Chart 3: Monthly Consistency
 
-![Monthly Pattern](outputs/chart3_monthly_pattern.png)
+![Monthly Pattern](outputs/chart3_monthly.png)
 
-**Caption:** Pattern repeats every month (Mar-Aug 2025) at 80-100%. September shows 6% due to partial data (only mid-month records available in dataset).
+**Caption:** 87% of monthly data compressed into Day 1. Pattern repeats Mar-Jul at 100%. September shows 6% (partial data).
 
 ---
 
-### Chart 4: State-by-State Breakdown
+### Chart 4: Universal System Failure
 
-![State Breakdown](outputs/chart4_state_breakdown.png)
+![State Breakdown](outputs/chart4_states.png)
 
-**Caption:** All 43 states exhibit the same artifact. This is systemic, not regional.
+**Caption:** 40 states SEVERE (>80%), 2 states MODERATE (50-80%). Zero states below 50%. This is systemic, not regional.
 
 ---
 
